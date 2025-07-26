@@ -21,6 +21,7 @@
   let showPrompt = false;
   let prompt = '';
   let model = (localStorage?.getItem('deorum-bio-model') || DEFAULT_MODEL) as StoryModel;
+  let useDNA = false;
   $: price = models[model].price;
 
   const togglePrompt = () => {
@@ -63,7 +64,7 @@
         isLoading = false;
       };
 
-      await stream('/api/stories', { prompt, model }, onData, onComplete);
+      await stream('/api/stories', { prompt, model, useDNA }, onData, onComplete);
       invalidate(KEYS.USER_DATA);
     } catch (err) {
       isLoading = false;
@@ -79,9 +80,12 @@
     <div>
       <IconButton onClick={copyBio} title={$t('common.details.editor.bio.copy')}>📋</IconButton>
 
-      <IconButton onClick={togglePrompt} title={$t('common.details.editor.bio.configurePrompt')}
-        >⚙️</IconButton
-      >
+      <IconButton onClick={togglePrompt} title={$t('common.details.editor.bio.configurePrompt')}>
+        ⚙️
+      </IconButton>
+      <label style="display:flex;align-items:center;font-size:12px;margin-left:4px;">
+        <input type="checkbox" bind:checked={useDNA} /> DNA
+      </label>
 
       {#if isLoading}
         <IconButton disabled>
