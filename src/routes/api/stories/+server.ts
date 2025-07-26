@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { StreamingTextResponse, streamText } from 'ai';
+import { generateNPCFromDNA } from '$lib/utils/npcDNA';
 
 import { getStoryModel } from '$lib/api/ai';
 import { authorize } from '$lib/api/auth';
@@ -14,8 +15,13 @@ export const config: import('@sveltejs/adapter-vercel').Config = {
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const { prompt, model } = (await request.json()) as { prompt: string; model: StoryModel };
-    if (!prompt) throw new Error('No prompt provided');
+    const { prompt, model, useDNA } = (await request.json()) as {
+      prompt?: string;
+      model: StoryModel;
+      useDNA?: boolean;
+    };
+
+    if (!useDNA && !prompt) throw new Error('No prompt provided');
 
     const { client, user } = await authorize(request);
     if (!user) throw error(401, 'Unauthorized');
@@ -25,16 +31,24 @@ export const POST: RequestHandler = async ({ request }) => {
 
     if (!coinsLeft || coinsLeft < price) throw error(403, 'Not enought coins');
 
-    const result = await streamText({
-      model: getStoryModel(model),
-      system: SYSTEM_PROMPT,
-      prompt,
-      temperature: 1
-    });
+    let stream;
+    if (useDNA) {
+      const dnaResult = await generateNPCFromDNA(model);
+      stream = dnaResult.stream;
+      log('story', 'Generating DNA-based story', { model });
+    } else {
+      const result = await streamText({
+        model: getStoryModel(model),
+        system: SYSTEM_PROMPT,
+        prompt,
+        temperature: 1
+      });
+      stream = result.toAIStream();
+      log('story', 'Generating story', { model, prompt });
+    }
     await client.records.update('profiles', user.profile.id, { coins: coinsLeft - price });
 
-    log('story', 'Generating story', { model, prompt });
-    return new StreamingTextResponse(result.toAIStream());
+    return new StreamingTextResponse(stream);
   } catch (err) {
     report('story', err);
     throw createServerError(err);
